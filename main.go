@@ -231,10 +231,10 @@ func getPuzzle(path string) *Puzzle {
 }
 
 func splitFrontMatter(file []byte) ([]byte, []byte, error) {
-	if !bytes.HasPrefix(file, []byte("<!--")) {
+	if !bytes.HasPrefix(file, []byte("<!--\n")) {
 		return nil, nil, errors.New("no frontmatter")
 	}
-	index := bytes.Index(file, []byte("-->"))
+	index := bytes.Index(file, []byte("-->\n"))
 	if index == -1 {
 		return nil, nil, errors.New("no frontmatter")
 	}
