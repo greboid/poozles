@@ -5,19 +5,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 	"time"
-
-	"github.com/mdigger/goldmark-images"
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/renderer/html"
-	"go.abhg.dev/goldmark/frontmatter"
 )
 
 type Puzzles struct {
@@ -37,10 +33,40 @@ type Puzzlemeta struct {
 	Hints   []string `yaml:"hints"`
 }
 
+const form = `
+<form id="input" autocomplete="off">
+  <input type="hidden" name="puzzle" value="%s" />
+  <input type="text" name="guess" value="" />
+  <button type="submit">Guess</button>
+</form>
+`
+
 func main() {
-	generate()
+	foundPuzzles := generate()
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir("dist")))
+	mux.HandleFunc("POST /guess", func(writer http.ResponseWriter, request *http.Request) {
+		puzzle := request.FormValue("puzzle")
+		guess := request.FormValue("guess")
+		if puzzle == "" || guess == "" {
+			writer.WriteHeader(http.StatusBadRequest)
+			fmt.Printf("Puzzle or guess is blank")
+			return
+		}
+		index := slices.IndexFunc(foundPuzzles.Puzzles, func(puzz Puzzle) bool {
+			return puzz.ID == puzzle
+		})
+		if index == -1 {
+			writer.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if slices.Contains(foundPuzzles.Puzzles[index].Metadata.Answers, guess) {
+			writer.WriteHeader(http.StatusOK)
+			return
+		}
+		writer.WriteHeader(http.StatusNotFound)
+		return
+	})
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", 8080),
 		Handler: mux,
@@ -66,7 +92,7 @@ func main() {
 	}
 }
 
-func generate() {
+func generate() *Puzzles {
 	foundPuzzles := getPuzzles()
 	_ = os.RemoveAll("./dist")
 	if err := os.MkdirAll("./dist", 0777); err != nil {
@@ -75,20 +101,23 @@ func generate() {
 	if err := os.WriteFile("dist/index.html", getIndexHTML(foundPuzzles.Index), 0644); err != nil {
 		log.Panic(err)
 	}
+	_, _ = copyFile("layout/main.css", "dist/main.css")
+	_, _ = copyFile("layout/main.js", "dist/main.js")
 	for _, puzzle := range foundPuzzles.Puzzles {
 		if err := os.MkdirAll("./dist/puzzles/"+puzzle.ID, 0777); err != nil {
 			log.Panic("Unable to create puzzle folder")
 		}
-		if err := os.WriteFile("dist/puzzles/"+puzzle.ID+"/index.html", getPuzzleHTML(puzzle.Content), 0644); err != nil {
+		if err := os.WriteFile("dist/puzzles/"+puzzle.ID+"/index.html", getPuzzleHTML(puzzle.ID, puzzle.Content), 0644); err != nil {
 			log.Panic(err)
 		}
 		for _, file := range puzzle.Files {
-			_, _ = copy("puzzles/"+puzzle.ID+"/"+file, "dist/puzzles/"+puzzle.ID+"/"+file)
+			_, _ = copyFile("puzzles/"+puzzle.ID+"/"+file, "dist/puzzles/"+puzzle.ID+"/"+file)
 		}
 	}
+	return foundPuzzles
 }
 
-func copy(src, dst string) (int64, error) {
+func copyFile(src, dst string) (int64, error) {
 	sourceFileStat, err := os.Stat(src)
 	if err != nil {
 		return 0, err
@@ -102,13 +131,13 @@ func copy(src, dst string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer source.Close()
+	defer func() { _ = source.Close() }()
 
 	destination, err := os.Create(dst)
 	if err != nil {
 		return 0, err
 	}
-	defer destination.Close()
+	defer func() { _ = destination.Close() }()
 	nBytes, err := io.Copy(destination, source)
 	return nBytes, err
 }
@@ -118,30 +147,21 @@ func getIndexHTML(content string) []byte {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return bytes.ReplaceAll(layoutBytes, []byte("<slot />"), []byte(content))
+	return bytes.ReplaceAll(layoutBytes, []byte("<div id=\"puzzle\"></div>"), []byte(content))
 }
 
-func getPuzzleHTML(content string) []byte {
+func getPuzzleHTML(puzzle string, content string) []byte {
 	layoutBytes, err := os.ReadFile("./layout/index.html")
 	if err != nil {
 		log.Fatal(err)
 	}
-	puzzleContent := append([]byte(content), []byte("<input type=text />")...)
-	return bytes.ReplaceAll(layoutBytes, []byte("<slot />"), []byte(puzzleContent))
+	content = fmt.Sprintf("<div id=\"puzzle\">%s</div>", content)
+	layoutBytes = bytes.ReplaceAll(layoutBytes, []byte("<div id=\"puzzle\"></div>"), []byte(content))
+	return bytes.ReplaceAll(layoutBytes, []byte("<div id=\"input\"></div>"), []byte(fmt.Sprintf(form, puzzle)))
 }
 
-func getPuzzles() Puzzles {
-	md := goldmark.New(
-		goldmark.WithExtensions(&frontmatter.Extender{}),
-		goldmark.WithParserOptions(
-			parser.WithAutoHeadingID(),
-		),
-		goldmark.WithRendererOptions(
-			html.WithHardWraps(),
-			html.WithUnsafe(),
-		),
-	)
-	var foundPuzzles = Puzzles{}
+func getPuzzles() *Puzzles {
+	var foundPuzzles = &Puzzles{}
 	entries, err := os.ReadDir("./puzzles")
 	if errors.Is(err, os.ErrNotExist) {
 		log.Fatal("Puzzles folder must exist")
@@ -156,12 +176,7 @@ func getPuzzles() Puzzles {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var buf bytes.Buffer
-	ctx := parser.NewContext()
-	if err := md.Convert(indexBytes, &buf, parser.WithContext(ctx)); err != nil {
-		log.Fatal("Unable to parse puzzle")
-	}
-	foundPuzzles.Index = buf.String()
+	foundPuzzles.Index = string(indexBytes)
 	for _, e := range entries {
 		if e.IsDir() {
 			foundPuzzles.Puzzles = append(foundPuzzles.Puzzles, *getPuzzle(e.Name()))
@@ -178,28 +193,15 @@ func getPuzzle(path string) *Puzzle {
 	if err != nil {
 		log.Fatal(err)
 	}
-	imageURL := func(src string) string {
-		return "/puzzles/" + path + "/" + src
+	frontmatterBytes, contentBytes, err := splitFrontMatter(indexBytes)
+	if err != nil {
+		log.Fatal(err)
 	}
-	md := goldmark.New(images.NewReplacer(imageURL),
-		goldmark.WithExtensions(&frontmatter.Extender{}),
-		goldmark.WithParserOptions(
-			parser.WithAutoHeadingID(),
-		),
-		goldmark.WithRendererOptions(
-			html.WithHardWraps(),
-			html.WithUnsafe(),
-		),
-	)
-	var buf bytes.Buffer
-	ctx := parser.NewContext()
-	if err := md.Convert(indexBytes, &buf, parser.WithContext(ctx)); err != nil {
-		log.Fatal("Unable to parse puzzle")
-	}
-	d := frontmatter.Get(ctx)
 	meta := &Puzzlemeta{}
-	if err := d.Decode(&meta); err != nil {
-		log.Fatal("Unable to parse puzzle metadata")
+	err = yaml.Unmarshal(frontmatterBytes, meta)
+	if err != nil {
+		log.Println("Unable to unmarshall frontmatter")
+		log.Fatal(err)
 	}
 	if meta.Title == "" {
 		log.Fatal("Puzzle needs a title")
@@ -223,7 +225,39 @@ func getPuzzle(path string) *Puzzle {
 	return &Puzzle{
 		ID:       path,
 		Metadata: *meta,
-		Content:  buf.String(),
+		Content:  string(contentBytes),
 		Files:    files,
 	}
+}
+
+func splitFrontMatter(file []byte) ([]byte, []byte, error) {
+	startPos := -1
+	startByte := -1
+	endByte := -1
+	var buf = bytes.NewBuffer(make([]byte, 0, 255))
+	var line string
+	for pos := range file {
+		if file[pos] == '\n' || file[pos] == '\r' {
+			line = buf.String()
+			buf.Truncate(0)
+		} else {
+			buf.Write([]byte{file[pos]})
+		}
+		if line == "---" && startByte == -1 {
+			startPos = pos
+			startByte = pos - len(line)
+			line = ""
+		}
+		if line == "---" && startByte > -1 && pos > startPos {
+			endByte = pos
+			line = ""
+		}
+		if startByte > -1 && endByte > -1 {
+			break
+		}
+	}
+	if startByte == -1 || endByte == -1 {
+		return nil, nil, errors.New("no frontmatter")
+	}
+	return file[startByte+3 : endByte-3], file[endByte:], nil
 }
