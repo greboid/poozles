@@ -14,3 +14,5 @@ hints: ["it's not a real word"]
 -->
 ```
 After this include the html content of the puzzle, linking to any of the files in the folder
+
+A guess box is added automatically and guesses submitted are handled and display the result with alert()
