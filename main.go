@@ -169,9 +169,9 @@ func getPuzzles() *Puzzles {
 	if err != nil {
 		log.Fatal(err)
 	}
-	indexBytes, err := os.ReadFile("./puzzles/index.md")
+	indexBytes, err := os.ReadFile("./puzzles/index.html")
 	if errors.Is(err, os.ErrNotExist) {
-		log.Fatal("puzzles/index.md - not found")
+		log.Fatal("puzzles/index.html - not found")
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -186,9 +186,9 @@ func getPuzzles() *Puzzles {
 }
 
 func getPuzzle(path string) *Puzzle {
-	indexBytes, err := os.ReadFile("./puzzles/" + path + "/index.md")
+	indexBytes, err := os.ReadFile("./puzzles/" + path + "/index.html")
 	if errors.Is(err, os.ErrNotExist) {
-		log.Fatal("puzzles/" + path + "/index.md - not found")
+		log.Fatal("puzzles/" + path + "/index.html - not found")
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -218,7 +218,7 @@ func getPuzzle(path string) *Puzzle {
 		log.Fatal(err)
 	}
 	for _, e := range entries {
-		if !e.IsDir() && e.Name() != "index.md" {
+		if !e.IsDir() && e.Name() != "index.html" {
 			files = append(files, e.Name())
 		}
 	}
@@ -243,12 +243,12 @@ func splitFrontMatter(file []byte) ([]byte, []byte, error) {
 		} else {
 			buf.Write([]byte{file[pos]})
 		}
-		if line == "---" && startByte == -1 {
+		if line == "<!--" && startByte == -1 {
 			startPos = pos
 			startByte = pos - len(line)
 			line = ""
 		}
-		if line == "---" && startByte > -1 && pos > startPos {
+		if line == "-->" && startByte > -1 && pos > startPos {
 			endByte = pos
 			line = ""
 		}
@@ -259,5 +259,5 @@ func splitFrontMatter(file []byte) ([]byte, []byte, error) {
 	if startByte == -1 || endByte == -1 {
 		return nil, nil, errors.New("no frontmatter")
 	}
-	return file[startByte+3 : endByte-3], file[endByte:], nil
+	return file[startByte+4 : endByte-3], file[endByte:], nil
 }
