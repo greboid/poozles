@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"gopkg.in/yaml.v3"
-	"io"
+	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -33,40 +33,16 @@ type Puzzlemeta struct {
 	Hints   []string `yaml:"hints"`
 }
 
-const form = `
-<form id="input" autocomplete="off">
-  <input type="hidden" name="puzzle" value="%s" />
-  <input type="text" name="guess" value="" />
-  <button type="submit">Guess</button>
-</form>
-`
-
 func main() {
-	foundPuzzles := generate()
+	foundPuzzles := getPuzzles()
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir("dist")))
-	mux.HandleFunc("POST /guess", func(writer http.ResponseWriter, request *http.Request) {
-		puzzle := request.FormValue("puzzle")
-		guess := request.FormValue("guess")
-		if puzzle == "" || guess == "" {
-			writer.WriteHeader(http.StatusBadRequest)
-			fmt.Printf("Puzzle or guess is blank")
-			return
-		}
-		index := slices.IndexFunc(foundPuzzles.Puzzles, func(puzz Puzzle) bool {
-			return puzz.ID == puzzle
-		})
-		if index == -1 {
-			writer.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if slices.Contains(foundPuzzles.Puzzles[index].Metadata.Answers, guess) {
-			writer.WriteHeader(http.StatusOK)
-			return
-		}
-		writer.WriteHeader(http.StatusNotFound)
-		return
-	})
+	mux.HandleFunc("GET /main.css", serveFile("layout/main.css"))
+	mux.HandleFunc("GET /main.js", serveFile("layout/main.js"))
+	mux.HandleFunc("GET /puzzles/{id}", addTrailingSlash)
+	mux.HandleFunc("GET /puzzles/{id}/", servePuzzle(foundPuzzles))
+	mux.HandleFunc("GET /puzzles/{id}/{file}", servePuzzleFile(foundPuzzles))
+	mux.HandleFunc("GET /{$}", serveIndex(foundPuzzles))
+	mux.HandleFunc("POST /guess", handleGuess(foundPuzzles))
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", 8080),
 		Handler: mux,
@@ -92,72 +68,115 @@ func main() {
 	}
 }
 
-func generate() *Puzzles {
-	foundPuzzles := getPuzzles()
-	_ = os.RemoveAll("./dist")
-	if err := os.MkdirAll("./dist", 0777); err != nil {
-		log.Panic("Unable to create dist folder")
-	}
-	if err := os.WriteFile("dist/index.html", getIndexHTML(foundPuzzles.Index), 0644); err != nil {
-		log.Panic(err)
-	}
-	_, _ = copyFile("layout/main.css", "dist/main.css")
-	_, _ = copyFile("layout/main.js", "dist/main.js")
-	for _, puzzle := range foundPuzzles.Puzzles {
-		if err := os.MkdirAll("./dist/puzzles/"+puzzle.ID, 0777); err != nil {
-			log.Panic("Unable to create puzzle folder")
-		}
-		if err := os.WriteFile("dist/puzzles/"+puzzle.ID+"/index.html", getPuzzleHTML(puzzle.ID, puzzle.Content), 0644); err != nil {
-			log.Panic(err)
-		}
-		for _, file := range puzzle.Files {
-			_, _ = copyFile("puzzles/"+puzzle.ID+"/"+file, "dist/puzzles/"+puzzle.ID+"/"+file)
-		}
-	}
-	return foundPuzzles
+func addTrailingSlash(writer http.ResponseWriter, request *http.Request) {
+	http.Redirect(writer, request, request.URL.String()+"/", http.StatusTemporaryRedirect)
 }
 
-func copyFile(src, dst string) (int64, error) {
-	sourceFileStat, err := os.Stat(src)
-	if err != nil {
-		return 0, err
+func servePuzzleFile(foundPuzzles *Puzzles) func(http.ResponseWriter, *http.Request) {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		puzzleID := request.PathValue("id")
+		index := slices.IndexFunc(foundPuzzles.Puzzles, func(puzz Puzzle) bool {
+			return puzz.ID == puzzleID
+		})
+		if index == -1 {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+		fileName := request.PathValue("file")
+		if !slices.Contains(foundPuzzles.Puzzles[index].Files, fileName) {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+		serveFile("puzzles/"+puzzleID+"/"+fileName)(writer, request)
 	}
-
-	if !sourceFileStat.Mode().IsRegular() {
-		return 0, fmt.Errorf("%s is not a regular file", src)
-	}
-
-	source, err := os.Open(src)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = source.Close() }()
-
-	destination, err := os.Create(dst)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = destination.Close() }()
-	nBytes, err := io.Copy(destination, source)
-	return nBytes, err
 }
 
-func getIndexHTML(content string) []byte {
-	layoutBytes, err := os.ReadFile("./layout/index.html")
-	if err != nil {
-		log.Fatal(err)
+func serveFile(file string) func(writer http.ResponseWriter, request *http.Request) {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		http.ServeFile(writer, request, file)
 	}
-	return bytes.ReplaceAll(layoutBytes, []byte("<div id=\"puzzle\"></div>"), []byte(content))
 }
 
-func getPuzzleHTML(puzzle string, content string) []byte {
-	layoutBytes, err := os.ReadFile("./layout/index.html")
-	if err != nil {
-		log.Fatal(err)
+func serveIndex(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request *http.Request) {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		templateBytes, err := os.ReadFile("layout/index.html")
+		if err != nil {
+			writer.WriteHeader(http.StatusInternalServerError)
+			fmt.Println("Unable to read layout template")
+			fmt.Println(err)
+			return
+		}
+		t, err := template.New("puzzle").Parse(string(templateBytes))
+		if err != nil {
+			writer.WriteHeader(http.StatusInternalServerError)
+			fmt.Println("Unable to create template")
+			fmt.Println(err)
+			return
+		}
+		err = t.ExecuteTemplate(writer, "puzzle", Puzzle{Content: foundPuzzles.Index})
+		if err != nil {
+			fmt.Println("Error executing template")
+			fmt.Println(err)
+		}
 	}
-	content = fmt.Sprintf("<div id=\"puzzle\">%s</div>", content)
-	layoutBytes = bytes.ReplaceAll(layoutBytes, []byte("<div id=\"puzzle\"></div>"), []byte(content))
-	return bytes.ReplaceAll(layoutBytes, []byte("<div id=\"input\"></div>"), []byte(fmt.Sprintf(form, puzzle)))
+}
+
+func servePuzzle(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request *http.Request) {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		puzzleID := request.PathValue("id")
+		index := slices.IndexFunc(foundPuzzles.Puzzles, func(puzz Puzzle) bool {
+			return puzz.ID == puzzleID
+		})
+		if index == -1 {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+		templateBytes, err := os.ReadFile("layout/index.html")
+		if err != nil {
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		t := template.New("puzzle")
+		t.Funcs(template.FuncMap{
+			"htmlSafe": func(html string) template.HTML {
+				return template.HTML(html)
+			},
+		})
+		t, err = t.Parse(string(templateBytes))
+		if err != nil {
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		err = t.ExecuteTemplate(writer, "puzzle", foundPuzzles.Puzzles[index])
+		if err != nil {
+			fmt.Println("Error executing template")
+			fmt.Println(err)
+		}
+	}
+}
+
+func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request *http.Request) {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		puzzle := request.FormValue("puzzle")
+		guess := request.FormValue("guess")
+		if puzzle == "" || guess == "" {
+			writer.WriteHeader(http.StatusBadRequest)
+			fmt.Printf("Puzzle or guess is blank")
+			return
+		}
+		index := slices.IndexFunc(foundPuzzles.Puzzles, func(puzz Puzzle) bool {
+			return puzz.ID == puzzle
+		})
+		if index == -1 {
+			writer.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if slices.Contains(foundPuzzles.Puzzles[index].Metadata.Answers, guess) {
+			writer.WriteHeader(http.StatusOK)
+			return
+		}
+		writer.WriteHeader(http.StatusNotFound)
+	}
 }
 
 func getPuzzles() *Puzzles {
