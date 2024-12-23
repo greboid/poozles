@@ -231,33 +231,12 @@ func getPuzzle(path string) *Puzzle {
 }
 
 func splitFrontMatter(file []byte) ([]byte, []byte, error) {
-	startPos := -1
-	startByte := -1
-	endByte := -1
-	var buf = bytes.NewBuffer(make([]byte, 0, 255))
-	var line string
-	for pos := range file {
-		if file[pos] == '\n' || file[pos] == '\r' {
-			line = buf.String()
-			buf.Truncate(0)
-		} else {
-			buf.Write([]byte{file[pos]})
-		}
-		if line == "<!--" && startByte == -1 {
-			startPos = pos
-			startByte = pos - len(line)
-			line = ""
-		}
-		if line == "-->" && startByte > -1 && pos > startPos {
-			endByte = pos
-			line = ""
-		}
-		if startByte > -1 && endByte > -1 {
-			break
-		}
-	}
-	if startByte == -1 || endByte == -1 {
+	if !bytes.HasPrefix(file, []byte("<!--")) {
 		return nil, nil, errors.New("no frontmatter")
 	}
-	return file[startByte+4 : endByte-3], file[endByte:], nil
+	index := bytes.Index(file, []byte("-->"))
+	if index == -1 {
+		return nil, nil, errors.New("no frontmatter")
+	}
+	return file[5:index], file[index+4:], nil
 }
