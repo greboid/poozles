@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"gopkg.in/yaml.v3"
-	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"text/template"
 	"time"
 )
 
@@ -100,31 +100,29 @@ func serveFile(file string) func(writer http.ResponseWriter, request *http.Reque
 	}
 }
 
+func renderTemplate(templateName string, data interface{}, writer http.ResponseWriter) {
+	templateBytes, err := os.ReadFile(templateName)
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+		fmt.Printf("Unable to load template from disk: `%s`\n%s", templateName, err.Error())
+		return
+	}
+	t := template.New("puzzle")
+	t, err = t.Parse(string(templateBytes))
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+		fmt.Printf("Error parsing template: `%s`\n%s", templateName, err.Error())
+		return
+	}
+	err = t.ExecuteTemplate(writer, "puzzle", data)
+	if err != nil {
+		fmt.Printf("Error executing template: `%s`\n%s", templateName, err.Error())
+	}
+}
+
 func serveIndex(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request *http.Request) {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		templateBytes, err := os.ReadFile("layout/index.html")
-		if err != nil {
-			writer.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		t := template.New("puzzle")
-		t.Funcs(template.FuncMap{
-			"htmlSafe": func(html string) template.HTML {
-				return template.HTML(html)
-			},
-		})
-		t, err = t.Parse(string(templateBytes))
-		if err != nil {
-			writer.WriteHeader(http.StatusInternalServerError)
-			fmt.Println("Unable to create template")
-			fmt.Println(err)
-			return
-		}
-		err = t.ExecuteTemplate(writer, "puzzle", Puzzle{Content: foundPuzzles.Index})
-		if err != nil {
-			fmt.Println("Error executing template")
-			fmt.Println(err)
-		}
+		renderTemplate("layout/index.html", Puzzle{Content: foundPuzzles.Index}, writer)
 	}
 }
 
@@ -138,27 +136,7 @@ func servePuzzle(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 			writer.WriteHeader(http.StatusNotFound)
 			return
 		}
-		templateBytes, err := os.ReadFile("layout/index.html")
-		if err != nil {
-			writer.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		t := template.New("puzzle")
-		t.Funcs(template.FuncMap{
-			"htmlSafe": func(html string) template.HTML {
-				return template.HTML(html)
-			},
-		})
-		t, err = t.Parse(string(templateBytes))
-		if err != nil {
-			writer.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		err = t.ExecuteTemplate(writer, "puzzle", foundPuzzles.Puzzles[index])
-		if err != nil {
-			fmt.Println("Error executing template")
-			fmt.Println(err)
-		}
+		renderTemplate("layout/puzzle.html", foundPuzzles.Puzzles[index], writer)
 	}
 }
 
