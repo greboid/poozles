@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"gopkg.in/yaml.v3"
@@ -29,9 +30,10 @@ type Puzzle struct {
 }
 
 type Puzzlemeta struct {
-	Title   string   `yaml:"title"`
-	Answers []string `yaml:"answers"`
-	Hints   []string `yaml:"hints"`
+	Title   string              `yaml:"title"`
+	Answers []string            `yaml:"answers"`
+	Hints   []string            `yaml:"hints"`
+	Unlocks map[string][]string `yaml:"unlocks"`
 }
 
 func main() {
@@ -156,7 +158,20 @@ func servePuzzle(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 	}
 }
 
+type GuessResult = string
+
+const (
+	guessCorrect   GuessResult = "correct"
+	guessIncorrect GuessResult = "incorrect"
+	guessUnlock    GuessResult = "unlock"
+)
+
 func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request *http.Request) {
+	type response struct {
+		Result GuessResult `json:"result"`
+		Unlock string      `json:"unlock,omitempty"`
+	}
+
 	return func(writer http.ResponseWriter, request *http.Request) {
 		puzzle := request.FormValue("puzzle")
 		guess := request.FormValue("guess")
@@ -172,11 +187,21 @@ func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 			writer.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if slices.Contains(foundPuzzles.Puzzles[index].Metadata.Answers, normaliseAnswer(guess)) {
-			writer.WriteHeader(http.StatusOK)
+
+		writer.Header().Add("Content-Type", "application/json")
+		normalisedGuess := normaliseAnswer(guess)
+		meta := foundPuzzles.Puzzles[index].Metadata
+		if slices.Contains(meta.Answers, normalisedGuess) {
+			_ = json.NewEncoder(writer).Encode(response{Result: guessCorrect})
 			return
 		}
-		writer.WriteHeader(http.StatusNotFound)
+		for unlock := range meta.Unlocks {
+			if slices.Contains(meta.Unlocks[unlock], normalisedGuess) {
+				_ = json.NewEncoder(writer).Encode(response{Result: guessUnlock, Unlock: unlock})
+				return
+			}
+		}
+		_ = json.NewEncoder(writer).Encode(response{Result: guessIncorrect})
 	}
 }
 
@@ -231,6 +256,11 @@ func getPuzzle(path string) *Puzzle {
 	}
 	for i := range meta.Answers {
 		meta.Answers[i] = normaliseAnswer(meta.Answers[i])
+	}
+	for k := range meta.Unlocks {
+		for i := range meta.Unlocks[k] {
+			meta.Unlocks[k][i] = normaliseAnswer(meta.Unlocks[k][i])
+		}
 	}
 	var files []string
 	entries, err := os.ReadDir("./puzzles/" + path)
