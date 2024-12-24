@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -171,7 +172,7 @@ func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 			writer.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if slices.Contains(foundPuzzles.Puzzles[index].Metadata.Answers, guess) {
+		if slices.Contains(foundPuzzles.Puzzles[index].Metadata.Answers, normaliseAnswer(guess)) {
 			writer.WriteHeader(http.StatusOK)
 			return
 		}
@@ -228,6 +229,9 @@ func getPuzzle(path string) *Puzzle {
 	if len(meta.Answers) == 0 {
 		log.Fatal("Puzzle needs at least one answer")
 	}
+	for i := range meta.Answers {
+		meta.Answers[i] = normaliseAnswer(meta.Answers[i])
+	}
 	var files []string
 	entries, err := os.ReadDir("./puzzles/" + path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -258,4 +262,8 @@ func splitFrontMatter(file []byte) ([]byte, []byte, error) {
 		return nil, nil, errors.New("no frontmatter")
 	}
 	return file[5:index], file[index+4:], nil
+}
+
+func normaliseAnswer(answer string) string {
+	return strings.ToLower(strings.TrimSpace(answer))
 }
