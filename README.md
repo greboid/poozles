@@ -11,6 +11,7 @@ This needs to have some frontmatter eg
 title: Example puzzle title
 answers: ["melisma"]
 hints: ["it's not a real word"]
+unlocks: {"you missed a letter!": ["melism", "elisma"]}
 -->
 ```
 After this include the html content of the puzzle, linking to any of the files in the folder
