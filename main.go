@@ -105,11 +105,15 @@ func serveIndex(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request 
 		templateBytes, err := os.ReadFile("layout/index.html")
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
-			fmt.Println("Unable to read layout template")
-			fmt.Println(err)
 			return
 		}
-		t, err := template.New("puzzle").Parse(string(templateBytes))
+		t := template.New("puzzle")
+		t.Funcs(template.FuncMap{
+			"htmlSafe": func(html string) template.HTML {
+				return template.HTML(html)
+			},
+		})
+		t, err = t.Parse(string(templateBytes))
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
 			fmt.Println("Unable to create template")
