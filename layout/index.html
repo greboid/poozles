@@ -7,13 +7,6 @@
   <link rel="stylesheet" href="/main.css"/>
 </head>
 <body>
-{{.Content }}
-{{if .ID}}
-  <form id="input" autocomplete="off">
-    <input type="hidden" name="puzzle" value="{{ .ID }}" />
-    <input type="text" name="guess" value="" />
-    <button type="submit">Guess</button>
-  </form>
-{{end}}
+{{.}}
 </body>
 </html>

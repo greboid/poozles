@@ -122,7 +122,7 @@ func renderTemplate(templateName string, data interface{}, writer http.ResponseW
 
 func serveIndex(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request *http.Request) {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		renderTemplate("layout/index.html", Puzzle{Content: foundPuzzles.Index}, writer)
+		renderTemplate("layout/index.html", foundPuzzles.Index, writer)
 	}
 }
 
