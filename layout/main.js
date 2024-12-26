@@ -13,7 +13,7 @@ if (root) {
     if (guesses.innerHTML.length > 0) {
       guesses.innerHTML += "<br>"
     }
-    guesses.innerHTML += now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes() + " - " + response.guess
+    guesses.innerText += now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes() + " - " + response.guess
     if (response.result === 'correct') {
       root.classList.remove('error')
       root.classList.add('correct')
@@ -24,8 +24,8 @@ if (root) {
       if (hints.innerHTML.length > 0) {
         hints.innerHTML += "<br>"
       }
-      guesses.innerHTML += " [Unlock]"
-      hints.innerHTML += now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes() + " - " + response.guess + " => " + response.unlock
+      guesses.innerText += " [Unlock]"
+      hints.innerText += now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes() + " - " + response.guess + " => " + response.unlock
     } else {
       alert('wtf')
       console.log(response)
