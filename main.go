@@ -48,7 +48,7 @@ func main() {
 	mux.HandleFunc("POST /guess", handleGuess(foundPuzzles))
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", 8080),
-		Handler: mux,
+		Handler: DisableCaching(mux),
 	}
 
 	go func() {
@@ -69,6 +69,14 @@ func main() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("Failed to shut down HTTP server: %v", err)
 	}
+}
+
+func DisableCaching(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate;")
+		w.Header().Set("pragma", "no-cache")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func addTrailingSlash(writer http.ResponseWriter, request *http.Request) {
@@ -150,6 +158,7 @@ const (
 
 func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request *http.Request) {
 	type response struct {
+		Guess  string      `json:"guess"`
 		Result GuessResult `json:"result"`
 		Unlock string      `json:"unlock,omitempty"`
 	}
@@ -174,16 +183,16 @@ func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 		normalisedGuess := normaliseAnswer(guess)
 		meta := foundPuzzles.Puzzles[index].Metadata
 		if slices.Contains(meta.Answers, normalisedGuess) {
-			_ = json.NewEncoder(writer).Encode(response{Result: guessCorrect})
+			_ = json.NewEncoder(writer).Encode(response{Guess: guess, Result: guessCorrect})
 			return
 		}
 		for unlock := range meta.Unlocks {
 			if slices.Contains(meta.Unlocks[unlock], normalisedGuess) {
-				_ = json.NewEncoder(writer).Encode(response{Result: guessUnlock, Unlock: unlock})
+				_ = json.NewEncoder(writer).Encode(response{Guess: guess, Result: guessUnlock, Unlock: unlock})
 				return
 			}
 		}
-		_ = json.NewEncoder(writer).Encode(response{Result: guessIncorrect})
+		_ = json.NewEncoder(writer).Encode(response{Guess: guess, Result: guessIncorrect})
 	}
 }
 

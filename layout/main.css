@@ -1,0 +1,50 @@
+body {
+  display: grid;
+  grid-template-columns: 80% 20%;
+  grid-template-rows: 5em auto auto;
+  grid-template-areas:
+    "title title"
+    "puzzle info"
+    "input info";
+}
+#title {
+  grid-area: title;
+}
+#puzzle {
+  grid-area: puzzle;
+  height: calc(100vh - 12em);
+  overflow: scroll;
+}
+#input {
+  grid-area: input;
+  height: 1em;
+}
+#info {
+  grid-area: info;
+  display: flex;
+  flex-direction: column;
+}
+#hints {
+  margin-bottom: 1em;
+  height: calc(50vh - 5em);
+  overflow-y: scroll;
+}
+#guesses {
+  height: calc(50vh - 5em);
+  overflow-y: scroll;
+}
+.error {
+  position: relative;
+  animation: shake .1s linear;
+  animation-iteration-count: 3;
+}
+@keyframes shake {
+  0% { left: -5px; }
+  100% { right: -5px; }
+}
+.correct > input[type=text] {
+  background-color: darkseagreen;
+}
+.error > input[type=text] {
+  background-color: indianred;
+}

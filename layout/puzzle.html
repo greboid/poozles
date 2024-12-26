@@ -7,11 +7,20 @@
   <link rel="stylesheet" href="/main.css"/>
 </head>
 <body>
-{{.Content }}
+<h1 id="title">{{.Metadata.Title}}</h1>
+<div id="puzzle">
+  {{.Content }}
+</div>
 <form id="input" autocomplete="off">
-  <input type="hidden" name="puzzle" value="{{ .ID }}" />
-  <input type="text" name="guess" value="" />
+  <input type="hidden" name="puzzle" value="{{ .ID }}"/>
+  <input type="text" name="guess" value=""/>
   <button type="submit">Guess</button>
 </form>
+<div id="info">
+  <div id="hints">
+  </div>
+  <div id="guesses">
+  </div>
+</div>
 </body>
 </html>
