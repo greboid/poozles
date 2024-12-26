@@ -26,11 +26,15 @@ body {
 }
 #hints {
   margin-bottom: 1em;
-  height: calc(50vh - 5em);
+  height: calc(20vh);
+  overflow-y: scroll;
+}
+#unlocks {
+  height: calc(20vh);
   overflow-y: scroll;
 }
 #guesses {
-  height: calc(50vh - 5em);
+  height: calc(20vh);
   overflow-y: scroll;
 }
 .error {

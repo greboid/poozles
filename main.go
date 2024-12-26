@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"gopkg.in/yaml.v3"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -46,6 +47,7 @@ func main() {
 	mux.HandleFunc("GET /puzzles/{id}/{file}", servePuzzleFile(foundPuzzles))
 	mux.HandleFunc("GET /{$}", serveIndex(foundPuzzles))
 	mux.HandleFunc("POST /guess", handleGuess(foundPuzzles))
+	mux.HandleFunc("POST /hint", handleHint(foundPuzzles))
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", 8080),
 		Handler: DisableCaching(mux),
@@ -68,6 +70,52 @@ func main() {
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("Failed to shut down HTTP server: %v", err)
+	}
+}
+
+func handleHint(foundPuzzles *Puzzles) func(http.ResponseWriter, *http.Request) {
+	type HintRequest struct {
+		Puzzle        string `json:"puzzle"`
+		HintRequested int    `json:"hintRequested"`
+	}
+	type HintResponse struct {
+		HintRequested int    `json:"hintRequested"`
+		Hint          string `json:"hint"`
+	}
+	return func(writer http.ResponseWriter, request *http.Request) {
+		hintRequest := HintRequest{}
+		bodyBytes, err := io.ReadAll(request.Body)
+		if err != nil {
+			writer.WriteHeader(http.StatusUnprocessableEntity)
+			return
+		}
+		err = json.Unmarshal(bodyBytes, &hintRequest)
+		if err != nil {
+			writer.WriteHeader(http.StatusUnprocessableEntity)
+			return
+		}
+		puzzleID := hintRequest.Puzzle
+		index := slices.IndexFunc(foundPuzzles.Puzzles, func(puzz Puzzle) bool {
+			return puzz.ID == puzzleID
+		})
+		if index == -1 {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+		hints := foundPuzzles.Puzzles[index].Metadata.Hints
+		if hintRequest.HintRequested < 0 || hintRequest.HintRequested > len(hints) {
+			writer.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		hint := hints[hintRequest.HintRequested]
+		responseData, err := json.Marshal(HintResponse{
+			HintRequested: hintRequest.HintRequested,
+			Hint:          hint,
+		})
+		_, err = writer.Write(responseData)
+		if err != nil {
+			fmt.Printf("Error writing response: %s", err.Error())
+		}
 	}
 }
 

@@ -17,8 +17,16 @@
   <button type="submit">Guess</button>
 </form>
 <div id="info">
-  <div id="hints">
+  <h2>Hints ({{ len .Metadata.Hints }})</h2>
+  <ol id="hints">
+      {{ range $hint := .Metadata.Hints }}
+      <li>[Click to reveal]</li>
+      {{ end }}
+  </ol>
+  <h2>Unlocks</h2>
+  <div id="unlocks">
   </div>
+  <h2>Guesses</h2>
   <div id="guesses">
   </div>
 </div>

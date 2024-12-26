@@ -1,6 +1,7 @@
 const root = document.getElementById('input')
 if (root) {
   const hints = document.getElementById('hints')
+  const unlocks = document.getElementById('unlocks')
   const guesses = document.getElementById('guesses')
   root.onsubmit = async (event) => {
     event.preventDefault()
@@ -21,11 +22,11 @@ if (root) {
       root.classList.remove('correct')
       root.classList.add('error')
     } else if (response.result === 'unlock') {
-      if (hints.innerHTML.length > 0) {
-        hints.innerHTML += "<br>"
+      if (unlocks.innerHTML.length > 0) {
+        unlocks.innerHTML += "<br>"
       }
       guesses.innerText += " [Unlock]"
-      hints.innerText += now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes() + " - " + response.guess + " => " + response.unlock
+      unlocks.innerText += now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes() + " - " + response.guess + " => " + response.unlock
     } else {
       alert('wtf')
       console.log(response)
@@ -34,5 +35,20 @@ if (root) {
   root.oninput = (event) => {
     root.classList.remove('error')
     root.classList.remove('correct')
+  }
+  hints.onclick = (event) => {
+    if (event.target.tagName !== 'LI') {
+      return
+    }
+    const hintRequested = [...event.target.parentNode.children].indexOf(event.target)
+    const puzzle = root.elements.puzzle.value
+    fetch('/hint', {
+      method: 'POST',
+      body: JSON.stringify({puzzle: puzzle, hintRequested: hintRequested})
+    })
+        .then(res => res.json())
+        .then(response => {
+          hints.children[response.hintRequested].innerText = response.hint
+        })
   }
 }
