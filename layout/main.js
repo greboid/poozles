@@ -42,6 +42,9 @@ if (root) {
     }
     const hintRequested = [...event.target.parentNode.children].indexOf(event.target)
     const puzzle = root.elements.puzzle.value
+    if (!confirm(`Are you sure you want to request hint ${hintRequested+1}?`)) {
+      return
+    }
     fetch('/hint', {
       method: 'POST',
       body: JSON.stringify({puzzle: puzzle, hintRequested: hintRequested})
