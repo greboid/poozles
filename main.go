@@ -103,7 +103,7 @@ func handleHint(foundPuzzles *Puzzles) func(http.ResponseWriter, *http.Request) 
 			return
 		}
 		hints := foundPuzzles.Puzzles[index].Metadata.Hints
-		if hintRequest.HintRequested < 0 || hintRequest.HintRequested > len(hints) {
+		if hintRequest.HintRequested < 0 || hintRequest.HintRequested >= len(hints) {
 			writer.WriteHeader(http.StatusBadRequest)
 			return
 		}
