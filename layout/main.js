@@ -26,7 +26,7 @@ if (root) {
         unlocks.innerHTML += "<br>"
       }
       guesses.innerText += " [Unlock]"
-      unlocks.innerText += now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes() + " - " + response.guess + " => " + response.unlock
+      unlocks.innerText += now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0') + " - " + response.guess + " => " + response.unlock
     } else {
       alert('wtf')
       console.log(response)
