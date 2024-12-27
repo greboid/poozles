@@ -10,7 +10,7 @@ import (
 	"github.com/csmith/envflag"
 	"gopkg.in/yaml.v3"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -41,11 +41,21 @@ type Puzzlemeta struct {
 
 var (
 	port  = flag.Int("port", 8080, "web server listen port")
-	debug = flag.Bool("debug", false, "Enable debugging and disable caching")
+	debug = flag.Bool("debug", true, "Enable debugging and disable caching")
 )
 
 func main() {
 	envflag.Parse()
+	if *debug {
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			AddSource: true,
+			Level:     slog.LevelDebug,
+		})))
+	} else {
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		})))
+	}
 	foundPuzzles := getPuzzles()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /main.css", serveFile("layout/main.css"))
@@ -68,11 +78,12 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Listening on port %d", *port)
+		slog.Info("Starting server", "port", *port)
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("HTTP server error: %v", err)
+			slog.Error("HTTP server error", "error", err)
+			os.Exit(2)
 		}
-		log.Println("Stopped listening")
+		slog.Info("Stopped server")
 	}()
 
 	c := make(chan os.Signal, 1)
@@ -83,7 +94,8 @@ func main() {
 	defer shutdownRelease()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Failed to shut down HTTP server: %v", err)
+		slog.Error("Failed to shut down HTTP server", "error", err)
+		os.Exit(2)
 	}
 }
 
@@ -101,11 +113,13 @@ func handleHint(foundPuzzles *Puzzles) func(http.ResponseWriter, *http.Request) 
 		bodyBytes, err := io.ReadAll(request.Body)
 		if err != nil {
 			writer.WriteHeader(http.StatusUnprocessableEntity)
+			slog.Debug("Empty body when requesting hint")
 			return
 		}
 		err = json.Unmarshal(bodyBytes, &hintRequest)
 		if err != nil {
 			writer.WriteHeader(http.StatusUnprocessableEntity)
+			slog.Debug("Unable to unmarshall the body into a HintRequest")
 			return
 		}
 		puzzleID := hintRequest.Puzzle
@@ -114,11 +128,13 @@ func handleHint(foundPuzzles *Puzzles) func(http.ResponseWriter, *http.Request) 
 		})
 		if index == -1 {
 			writer.WriteHeader(http.StatusNotFound)
+			slog.Debug("Puzzle ID not found", "puzzleID", hintRequest.Puzzle)
 			return
 		}
 		hints := foundPuzzles.Puzzles[index].Metadata.Hints
 		if hintRequest.HintRequested < 0 || hintRequest.HintRequested >= len(hints) {
 			writer.WriteHeader(http.StatusBadRequest)
+			slog.Debug("Hint index not found", "puzzleID", hintRequest.Puzzle, "hintIndex", hintRequest.HintRequested)
 			return
 		}
 		hint := hints[hintRequest.HintRequested]
@@ -128,7 +144,7 @@ func handleHint(foundPuzzles *Puzzles) func(http.ResponseWriter, *http.Request) 
 		})
 		_, err = writer.Write(responseData)
 		if err != nil {
-			fmt.Printf("Error writing response: %s", err.Error())
+			slog.Error("Error writing response to client", "error", err.Error())
 		}
 	}
 }
@@ -153,11 +169,13 @@ func servePuzzleFile(foundPuzzles *Puzzles) func(http.ResponseWriter, *http.Requ
 		})
 		if index == -1 {
 			writer.WriteHeader(http.StatusNotFound)
+			slog.Debug("Puzzle ID not found", "puzzleID", puzzleID)
 			return
 		}
 		fileName := request.PathValue("file")
 		if !slices.Contains(foundPuzzles.Puzzles[index].Files, fileName) {
 			writer.WriteHeader(http.StatusNotFound)
+			slog.Debug("Puzzle file not found", "puzzleID", puzzleID, "file", fileName)
 			return
 		}
 		serveFile("puzzles/"+puzzleID+"/"+fileName)(writer, request)
@@ -174,19 +192,19 @@ func renderTemplate(templateName string, data interface{}, writer http.ResponseW
 	templateBytes, err := os.ReadFile(templateName)
 	if err != nil {
 		writer.WriteHeader(http.StatusInternalServerError)
-		fmt.Printf("Unable to load template from disk: `%s`\n%s", templateName, err.Error())
+		slog.Error("Unable to load template from disk", "template", templateName, "error", err)
 		return
 	}
 	t := template.New("puzzle")
 	t, err = t.Parse(string(templateBytes))
 	if err != nil {
 		writer.WriteHeader(http.StatusInternalServerError)
-		fmt.Printf("Error parsing template: `%s`\n%s", templateName, err.Error())
+		slog.Error("Error parsing template", "template", templateName, "error", err)
 		return
 	}
 	err = t.ExecuteTemplate(writer, "puzzle", data)
 	if err != nil {
-		fmt.Printf("Error executing template: `%s`\n%s", templateName, err.Error())
+		slog.Error("Error executing template", "template", templateName, "error", err)
 	}
 }
 
@@ -204,6 +222,7 @@ func servePuzzle(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 		})
 		if index == -1 {
 			writer.WriteHeader(http.StatusNotFound)
+			slog.Debug("Puzzle ID not found", "puzzleID", puzzleID)
 			return
 		}
 		renderTemplate("layout/puzzle.html", foundPuzzles.Puzzles[index], writer)
@@ -230,7 +249,7 @@ func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 		guess := request.FormValue("guess")
 		if puzzle == "" || guess == "" {
 			writer.WriteHeader(http.StatusBadRequest)
-			fmt.Printf("Puzzle or guess is blank")
+			slog.Debug("Puzzle or guess is blank", "puzzleID", puzzle, "guess", guess)
 			return
 		}
 		index := slices.IndexFunc(foundPuzzles.Puzzles, func(puzz Puzzle) bool {
@@ -238,6 +257,7 @@ func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 		})
 		if index == -1 {
 			writer.WriteHeader(http.StatusBadRequest)
+			slog.Debug("Puzzle ID not found", "puzzleID", puzzle)
 			return
 		}
 
@@ -246,15 +266,18 @@ func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 		meta := foundPuzzles.Puzzles[index].Metadata
 		if slices.Contains(meta.Answers, normalisedGuess) {
 			_ = json.NewEncoder(writer).Encode(response{Guess: guess, Result: guessCorrect})
+			slog.Debug("Correct guess", "puzzleID", puzzle, "guess", guess)
 			return
 		}
 		for unlock := range meta.Unlocks {
 			if slices.Contains(meta.Unlocks[unlock], normalisedGuess) {
 				_ = json.NewEncoder(writer).Encode(response{Guess: guess, Result: guessUnlock, Unlock: unlock})
+				slog.Debug("Unlock guess", "puzzleID", puzzle, "guess", guess)
 				return
 			}
 		}
 		_ = json.NewEncoder(writer).Encode(response{Guess: guess, Result: guessIncorrect})
+		slog.Debug("Incorrect guess", "puzzleID", puzzle, "guess", guess)
 	}
 }
 
@@ -262,17 +285,21 @@ func getPuzzles() *Puzzles {
 	var foundPuzzles = &Puzzles{}
 	entries, err := os.ReadDir("./puzzles")
 	if errors.Is(err, os.ErrNotExist) {
-		log.Fatal("Puzzles folder must exist")
+		slog.Error("Puzzles folder must exist", "error", err)
+		os.Exit(3)
 	}
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Error reading puzzles folder", "error", err)
+		os.Exit(3)
 	}
 	indexBytes, err := os.ReadFile("./puzzles/index.html")
 	if errors.Is(err, os.ErrNotExist) {
-		log.Fatal("puzzles/index.html - not found")
+		slog.Error("Puzzles folder needs to contain index.html", "error", err)
+		os.Exit(3)
 	}
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Error reading puzzles index", "error", err)
+		os.Exit(3)
 	}
 	foundPuzzles.Index = string(indexBytes)
 	for _, e := range entries {
@@ -286,26 +313,31 @@ func getPuzzles() *Puzzles {
 func getPuzzle(path string) *Puzzle {
 	indexBytes, err := os.ReadFile("./puzzles/" + path + "/index.html")
 	if errors.Is(err, os.ErrNotExist) {
-		log.Fatal("puzzles/" + path + "/index.html - not found")
+		slog.Error("Each puzzle needs to have an index.html", "error", err, "puzzle", path)
+		os.Exit(4)
 	}
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Error loading the puzzle index.html", "error", err, "puzzle", path)
+		os.Exit(4)
 	}
 	frontmatterBytes, contentBytes, err := splitFrontMatter(indexBytes)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Error loading the puzzle frontmatter", "error", err, "puzzle", path)
+		os.Exit(4)
 	}
 	meta := &Puzzlemeta{}
 	err = yaml.Unmarshal(frontmatterBytes, meta)
 	if err != nil {
-		log.Println("Unable to unmarshall frontmatter")
-		log.Fatal(err)
+		slog.Error("Error unmarshalling frontmatter", "error", err, "puzzle", path)
+		os.Exit(4)
 	}
 	if meta.Title == "" {
-		log.Fatal("Puzzle needs a title")
+		slog.Error("The `title` attribute is required", "error", err, "puzzle", path)
+		os.Exit(4)
 	}
 	if len(meta.Answers) == 0 {
-		log.Fatal("Puzzle needs at least one answer")
+		slog.Error("The `answers` attribute must have at least 1 answer", "error", err, "puzzle", path)
+		os.Exit(4)
 	}
 	for i := range meta.Answers {
 		meta.Answers[i] = normaliseAnswer(meta.Answers[i])
@@ -318,10 +350,12 @@ func getPuzzle(path string) *Puzzle {
 	var files []string
 	entries, err := os.ReadDir("./puzzles/" + path)
 	if errors.Is(err, os.ErrNotExist) {
-		log.Fatal("Puzzles folder must exist")
+		slog.Error("Puzzles folder must exist", "error", err)
+		os.Exit(4)
 	}
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Error reading puzzles folder", "error", err)
+		os.Exit(4)
 	}
 	for _, e := range entries {
 		if !e.IsDir() && e.Name() != "index.html" {
