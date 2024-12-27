@@ -61,7 +61,7 @@ func main() {
 	mux.HandleFunc("GET /main.css", serveFile("layout/main.css"))
 	mux.HandleFunc("GET /main.js", serveFile("layout/main.js"))
 	mux.HandleFunc("GET /puzzles/{id}", addTrailingSlash)
-	mux.HandleFunc("GET /puzzles/{id}/", servePuzzle(foundPuzzles))
+	mux.HandleFunc("GET /puzzles/{id}/{$}", servePuzzle(foundPuzzles))
 	mux.HandleFunc("GET /puzzles/{id}/{file}", servePuzzleFile(foundPuzzles))
 	mux.HandleFunc("GET /{$}", serveIndex(foundPuzzles))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
@@ -69,9 +69,9 @@ func main() {
 	mux.HandleFunc("POST /hint", handleHint(foundPuzzles))
 	var handler http.Handler
 	if *debug {
-		handler = DisableCaching(mux)
+		handler = NotFoundHandler(DisableCaching(mux))
 	} else {
-		handler = mux
+		handler = NotFoundHandler(mux)
 	}
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", *port),
