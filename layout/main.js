@@ -7,9 +7,13 @@ const timeStamp = () => {
 
 const submitGuess = async (e) => {
   e.preventDefault()
+  const input = document.getElementById('input')
   fetch('/guess', {
     method: 'POST',
-    body:   new FormData(document.getElementById('input')),
+    body:   JSON.stringify({
+      puzzle: input.elements.puzzle.value,
+      guess: input.elements.guess.value
+    }),
   })
       .then(res => res.json())
       .then(response => handleGuessResponse(response))

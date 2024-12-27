@@ -239,46 +239,61 @@ const (
 )
 
 func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request *http.Request) {
-	type response struct {
+	type Guess struct {
+		Puzzle string `json:"puzzle"`
+		Guess  string `json:"guess"`
+	}
+	type GuessResponse struct {
 		Guess  string      `json:"guess"`
 		Result GuessResult `json:"result"`
 		Unlock string      `json:"unlock,omitempty"`
 	}
 
 	return func(writer http.ResponseWriter, request *http.Request) {
-		puzzle := request.FormValue("puzzle")
-		guess := request.FormValue("guess")
-		if puzzle == "" || guess == "" {
+		guess := Guess{}
+		bodyBytes, err := io.ReadAll(request.Body)
+		if err != nil {
+			writer.WriteHeader(http.StatusUnprocessableEntity)
+			slog.Debug("Empty body when submitting guest")
+			return
+		}
+		err = json.Unmarshal(bodyBytes, &guess)
+		if err != nil {
+			writer.WriteHeader(http.StatusUnprocessableEntity)
+			slog.Debug("Unable to unmarshall the body into a Guess")
+			return
+		}
+		if guess.Puzzle == "" || guess.Guess == "" {
 			writer.WriteHeader(http.StatusBadRequest)
-			slog.Debug("Puzzle or guess is blank", "puzzleID", puzzle, "guess", guess)
+			slog.Debug("Puzzle or guess is blank", "puzzleID", guess.Puzzle, "guess", guess.Guess)
 			return
 		}
 		index := slices.IndexFunc(foundPuzzles.Puzzles, func(puzz Puzzle) bool {
-			return puzz.ID == puzzle
+			return puzz.ID == guess.Puzzle
 		})
 		if index == -1 {
 			writer.WriteHeader(http.StatusBadRequest)
-			slog.Debug("Puzzle ID not found", "puzzleID", puzzle)
+			slog.Debug("Puzzle ID not found", "puzzleID", guess.Puzzle)
 			return
 		}
 
 		writer.Header().Add("Content-Type", "application/json")
-		normalisedGuess := normaliseAnswer(guess)
+		normalisedGuess := normaliseAnswer(guess.Guess)
 		meta := foundPuzzles.Puzzles[index].Metadata
 		if slices.Contains(meta.Answers, normalisedGuess) {
-			_ = json.NewEncoder(writer).Encode(response{Guess: guess, Result: guessCorrect})
-			slog.Debug("Correct guess", "puzzleID", puzzle, "guess", guess)
+			_ = json.NewEncoder(writer).Encode(GuessResponse{Guess: guess.Guess, Result: guessCorrect})
+			slog.Debug("Correct guess", "puzzleID", guess.Puzzle, "guess", guess)
 			return
 		}
 		for unlock := range meta.Unlocks {
 			if slices.Contains(meta.Unlocks[unlock], normalisedGuess) {
-				_ = json.NewEncoder(writer).Encode(response{Guess: guess, Result: guessUnlock, Unlock: unlock})
-				slog.Debug("Unlock guess", "puzzleID", puzzle, "guess", guess)
+				_ = json.NewEncoder(writer).Encode(GuessResponse{Guess: guess.Guess, Result: guessUnlock, Unlock: unlock})
+				slog.Debug("Unlock guess", "puzzleID", guess.Puzzle, "guess", guess)
 				return
 			}
 		}
-		_ = json.NewEncoder(writer).Encode(response{Guess: guess, Result: guessIncorrect})
-		slog.Debug("Incorrect guess", "puzzleID", puzzle, "guess", guess)
+		_ = json.NewEncoder(writer).Encode(GuessResponse{Guess: guess.Guess, Result: guessIncorrect})
+		slog.Debug("Incorrect guess", "puzzleID", guess.Puzzle, "guess", guess)
 	}
 }
 
