@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"gopkg.in/yaml.v3"
 	"io"
@@ -37,6 +38,11 @@ type Puzzlemeta struct {
 	Unlocks map[string][]string `yaml:"unlocks"`
 }
 
+var (
+	port  = flag.Int("port", 8080, "web server listen port")
+	debug = flag.Bool("debug", false, "Enable debugging and disable caching")
+)
+
 func main() {
 	foundPuzzles := getPuzzles()
 	mux := http.NewServeMux()
@@ -48,13 +54,19 @@ func main() {
 	mux.HandleFunc("GET /{$}", serveIndex(foundPuzzles))
 	mux.HandleFunc("POST /guess", handleGuess(foundPuzzles))
 	mux.HandleFunc("POST /hint", handleHint(foundPuzzles))
+	var handler http.Handler
+	if *debug {
+		handler = DisableCaching(mux)
+	} else {
+		handler = mux
+	}
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", 8080),
-		Handler: DisableCaching(mux),
+		Addr:    fmt.Sprintf(":%d", *port),
+		Handler: handler,
 	}
 
 	go func() {
-		log.Printf("Listening on port %d", 8080)
+		log.Printf("Listening on port %d", *port)
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("HTTP server error: %v", err)
 		}
