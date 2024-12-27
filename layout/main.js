@@ -1,12 +1,14 @@
 const root = document.getElementById('input')
 if (root) {
+  const answerBox = root.querySelector('[name="guess"]')
   const hints = document.getElementById('hints')
   const unlocks = document.getElementById('unlocks')
   const guesses = document.getElementById('guesses')
   root.onsubmit = async (event) => {
     event.preventDefault()
     const now = new Date()
-    const formData= new FormData(event.target)
+    const formData = new FormData(event.target)
+    answerBox.value = '';
     const response = await fetch('/guess', {
       method: 'POST',
       body: formData
