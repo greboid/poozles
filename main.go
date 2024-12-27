@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/csmith/envflag"
 	"gopkg.in/yaml.v3"
 	"io"
 	"log"
@@ -44,6 +45,7 @@ var (
 )
 
 func main() {
+	envflag.Parse()
 	foundPuzzles := getPuzzles()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /main.css", serveFile("layout/main.css"))
