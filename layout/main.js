@@ -1,58 +1,77 @@
-const root = document.getElementById('input')
-if (root) {
-  const unlocks = document.getElementById('unlocks')
-  const guesses = document.getElementById('guesses')
-  root.onsubmit = async (event) => {
-    event.preventDefault()
-    const now = new Date()
-    const formData= new FormData(event.target)
-    const response = await fetch('/guess', {
-      method: 'POST',
-      body: formData
-    }).then(res => res.json())
-    root.elements.guess.value = ""
-    if (guesses.innerHTML.length > 0) {
-      guesses.innerHTML += "<br>"
-    }
-    guesses.innerText += now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes() + " - " + response.guess
-    if (response.result === 'correct') {
-      root.classList.remove('error')
-      root.classList.add('correct')
-    } else if (response.result === 'incorrect') {
-      root.classList.remove('correct')
-      root.classList.add('error')
-    } else if (response.result === 'unlock') {
-      if (unlocks.innerHTML.length > 0) {
-        unlocks.innerHTML += "<br>"
-      }
-      guesses.innerText += " [Unlock]"
-      unlocks.innerText += now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0') + " - " + response.guess + " => " + response.unlock
-    } else {
-      alert('wtf')
-      console.log(response)
-    }
-  }
-  root.oninput = (event) => {
-    root.classList.remove('error')
-    root.classList.remove('correct')
-  }
+const timeStamp = () => {
+  const now = new Date()
+  return now.getHours().toString().padStart(2, '0')
+         + ':'
+         + now.getMinutes().toString().padStart(2, '0')
+}
 
-  document.querySelectorAll('.hint button').forEach((el) =>
-      el.addEventListener('click', (event) => {
-        const parent = event.target.closest('.hint')
-        const hintId = parseInt(parent.dataset.index)
-        const puzzle = root.elements.puzzle.value
-    
-        fetch('/hint', {
-          method: 'POST',
-          body: JSON.stringify({puzzle: puzzle, hintRequested: hintId})
-        })
-            .then(res => res.json())
-            .then(response => {
-              parent.querySelector('p').innerText = response.hint
-              parent.querySelector('p').className = 'unlocked'
-              event.target.remove()
-            })
+const submitGuess = async (e) => {
+  e.preventDefault()
+  fetch('/guess', {
+    method: 'POST',
+    body:   new FormData(document.getElementById('input')),
+  })
+      .then(res => res.json())
+      .then(response => handleGuessResponse(response))
+}
+
+const handleGuessResponse = (response) => {
+  const input = document.getElementById('input')
+  const guesses = document.getElementById('guesses')
+  const unlocks = document.getElementById('unlocks')
+  input.elements.guess.value = ''
+  if (guesses.innerHTML.length > 0) {
+    guesses.innerHTML += '<br>'
+  }
+  guesses.innerText += timeStamp() + ' - ' + response.guess
+  if (response.result === 'correct') {
+    input.classList.remove('error')
+    input.classList.add('correct')
+  } else if (response.result === 'incorrect') {
+    input.classList.remove('correct')
+    input.classList.add('error')
+  } else if (response.result === 'unlock') {
+    if (unlocks.innerHTML.length > 0) {
+      unlocks.innerHTML += '<br>'
+    }
+    guesses.innerText += ' [Unlock]'
+    unlocks.innerText += timeStamp() + ' - ' + response.guess + ' => ' + response.unlock
+  } else {
+    alert('wtf')
+    console.log(response)
+  }
+}
+
+const clearInput = () => {
+  const input = document.getElementById('input')
+  input.classList.remove('error')
+  input.classList.remove('correct')
+}
+
+const revealHint = (event) => {
+  const input = document.getElementById('input')
+  const parent = event.target.closest('.hint')
+  const hintId = parseInt(parent.dataset.index)
+  const puzzle = input.elements.puzzle.value
+
+  fetch('/hint', {
+    method: 'POST',
+    body:   JSON.stringify({puzzle: puzzle, hintRequested: hintId}),
+  })
+      .then(res => res.json())
+      .then(response => {
+        parent.querySelector('p').innerText = response.hint
+        parent.querySelector('p').className = 'unlocked'
+        event.target.remove()
       })
-  )
+}
+
+const addEventButtonListeners = (buttons) => {
+  buttons.forEach((el) => el.addEventListener('click', revealHint))
+}
+
+if (document.getElementById('input')) {
+  document.getElementById('input').onsubmit = submitGuess
+  document.getElementById('input').oninput = clearInput
+  addEventButtonListeners(document.querySelectorAll('.hint button'))
 }
