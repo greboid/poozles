@@ -37,20 +37,22 @@ if (root) {
     root.classList.remove('correct')
   }
 
-  document.querySelector('.hint button').addEventListener('click', (event) => {
-    const parent = event.target.closest('.hint')
-    const hintId = parseInt(parent.dataset.index)
-    const puzzle = root.elements.puzzle.value
-
-    fetch('/hint', {
-      method: 'POST',
-      body: JSON.stringify({puzzle: puzzle, hintRequested: hintId})
-    })
-        .then(res => res.json())
-        .then(response => {
-          parent.querySelector('p').innerText = response.hint
-          parent.querySelector('p').className = 'unlocked'
-          event.target.remove()
+  document.querySelectorAll('.hint button').forEach((el) =>
+      el.addEventListener('click', (event) => {
+        const parent = event.target.closest('.hint')
+        const hintId = parseInt(parent.dataset.index)
+        const puzzle = root.elements.puzzle.value
+    
+        fetch('/hint', {
+          method: 'POST',
+          body: JSON.stringify({puzzle: puzzle, hintRequested: hintId})
         })
-  })
+            .then(res => res.json())
+            .then(response => {
+              parent.querySelector('p').innerText = response.hint
+              parent.querySelector('p').className = 'unlocked'
+              event.target.remove()
+            })
+      })
+  )
 }
