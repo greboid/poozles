@@ -19,8 +19,11 @@
 <div id="info">
   <h2>Hints ({{ len .Metadata.Hints }})</h2>
   <ol id="hints">
-      {{ range $hint := .Metadata.Hints }}
-      <li>[Click to reveal]</li>
+      {{ range $index, $hint := .Metadata.Hints }}
+      <li class="hint" data-index="{{ $index }}">
+        <p class="locked">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+        <button>Reveal this hint</button>
+      </li>
       {{ end }}
   </ol>
   <h2>Unlocks</h2>
