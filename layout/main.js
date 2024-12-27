@@ -11,6 +11,7 @@ if (root) {
       method: 'POST',
       body: formData
     }).then(res => res.json())
+    root.elements.guess.value = ""
     if (guesses.innerHTML.length > 0) {
       guesses.innerHTML += "<br>"
     }
