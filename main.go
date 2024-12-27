@@ -282,18 +282,18 @@ func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 		meta := foundPuzzles.Puzzles[index].Metadata
 		if slices.Contains(meta.Answers, normalisedGuess) {
 			_ = json.NewEncoder(writer).Encode(GuessResponse{Guess: guess.Guess, Result: guessCorrect})
-			slog.Debug("Correct guess", "puzzleID", guess.Puzzle, "guess", guess)
+			slog.Debug("Correct guess", "puzzleID", guess.Puzzle, "guess", guess.Guess, "normlisedGuess", normalisedGuess)
 			return
 		}
 		for unlock := range meta.Unlocks {
 			if slices.Contains(meta.Unlocks[unlock], normalisedGuess) {
 				_ = json.NewEncoder(writer).Encode(GuessResponse{Guess: guess.Guess, Result: guessUnlock, Unlock: unlock})
-				slog.Debug("Unlock guess", "puzzleID", guess.Puzzle, "guess", guess)
+				slog.Debug("Unlock guess", "puzzleID", guess.Puzzle, "guess", guess.Guess, "normlisedGuess", normalisedGuess)
 				return
 			}
 		}
 		_ = json.NewEncoder(writer).Encode(GuessResponse{Guess: guess.Guess, Result: guessIncorrect})
-		slog.Debug("Incorrect guess", "puzzleID", guess.Puzzle, "guess", guess)
+		slog.Debug("Incorrect guess", "puzzleID", guess.Puzzle, "guess", guess.Guess, "normlisedGuess", normalisedGuess)
 	}
 }
 
