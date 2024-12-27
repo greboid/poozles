@@ -64,6 +64,7 @@ func main() {
 	mux.HandleFunc("GET /puzzles/{id}/", servePuzzle(foundPuzzles))
 	mux.HandleFunc("GET /puzzles/{id}/{file}", servePuzzleFile(foundPuzzles))
 	mux.HandleFunc("GET /{$}", serveIndex(foundPuzzles))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	mux.HandleFunc("POST /guess", handleGuess(foundPuzzles))
 	mux.HandleFunc("POST /hint", handleHint(foundPuzzles))
 	var handler http.Handler
