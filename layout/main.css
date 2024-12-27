@@ -46,13 +46,6 @@ body {
   0% { left: -5px; }
   100% { right: -5px; }
 }
-.correct > input[type=text] {
-  background-color: darkseagreen;
-}
-.error > input[type=text] {
-  background-color: indianred;
-}
-
 .hint {
   display: grid;
 

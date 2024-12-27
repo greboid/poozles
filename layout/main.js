@@ -15,37 +15,29 @@ const submitGuess = async (e) => {
       .then(response => handleGuessResponse(response))
 }
 
+const addToList = (list, response) => {
+  if (list.innerHTML.length > 0) {
+    list.innerHTML += '<br>'
+  }
+  list.innerText += timeStamp() + ': ' + response
+}
+
 const handleGuessResponse = (response) => {
   const input = document.getElementById('input')
   const guesses = document.getElementById('guesses')
   const unlocks = document.getElementById('unlocks')
   input.elements.guess.value = ''
-  if (guesses.innerHTML.length > 0) {
-    guesses.innerHTML += '<br>'
-  }
-  guesses.innerText += timeStamp() + ' - ' + response.guess
   if (response.result === 'correct') {
-    input.classList.remove('error')
-    input.classList.add('correct')
+    addToList(guesses, '[✅] ' + response.guess)
   } else if (response.result === 'incorrect') {
-    input.classList.remove('correct')
-    input.classList.add('error')
+    addToList(guesses, '[❌] ' + response.guess)
   } else if (response.result === 'unlock') {
-    if (unlocks.innerHTML.length > 0) {
-      unlocks.innerHTML += '<br>'
-    }
-    guesses.innerText += ' [Unlock]'
-    unlocks.innerText += timeStamp() + ' - ' + response.guess + ' => ' + response.unlock
+    addToList(guesses, '[🔓] ' + response.guess)
+    addToList(unlocks, response.guess + ' => ' + response.unlock)
   } else {
     alert('wtf')
     console.log(response)
   }
-}
-
-const clearInput = () => {
-  const input = document.getElementById('input')
-  input.classList.remove('error')
-  input.classList.remove('correct')
 }
 
 const revealHint = (event) => {
@@ -72,6 +64,5 @@ const addEventButtonListeners = (buttons) => {
 
 if (document.getElementById('input')) {
   document.getElementById('input').onsubmit = submitGuess
-  document.getElementById('input').oninput = clearInput
   addEventButtonListeners(document.querySelectorAll('.hint button'))
 }
