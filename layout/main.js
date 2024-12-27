@@ -1,6 +1,5 @@
 const root = document.getElementById('input')
 if (root) {
-  const hints = document.getElementById('hints')
   const unlocks = document.getElementById('unlocks')
   const guesses = document.getElementById('guesses')
   root.onsubmit = async (event) => {
@@ -37,22 +36,21 @@ if (root) {
     root.classList.remove('error')
     root.classList.remove('correct')
   }
-  hints.onclick = (event) => {
-    if (event.target.tagName !== 'LI') {
-      return
-    }
-    const hintRequested = [...event.target.parentNode.children].indexOf(event.target)
+
+  document.querySelector('.hint button').addEventListener('click', (event) => {
+    const parent = event.target.closest('.hint')
+    const hintId = parseInt(parent.dataset.index)
     const puzzle = root.elements.puzzle.value
-    if (!confirm(`Are you sure you want to request hint ${hintRequested+1}?`)) {
-      return
-    }
+
     fetch('/hint', {
       method: 'POST',
-      body: JSON.stringify({puzzle: puzzle, hintRequested: hintRequested})
+      body: JSON.stringify({puzzle: puzzle, hintRequested: hintId})
     })
         .then(res => res.json())
         .then(response => {
-          hints.children[response.hintRequested].innerText = response.hint
+          parent.querySelector('p').innerText = response.hint
+          parent.querySelector('p').className = 'unlocked'
+          event.target.remove()
         })
-  }
+  })
 }

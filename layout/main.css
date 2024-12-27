@@ -52,3 +52,35 @@ body {
 .error > input[type=text] {
   background-color: indianred;
 }
+
+.hint {
+  display: grid;
+
+  * {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  p {
+    &.locked {
+      filter: blur(8px);
+    }
+
+    &.unlocked {
+      transition: filter 1s;
+    }
+  }
+
+  button {
+    justify-self: center;
+    align-self: center;
+
+    cursor: pointer;
+    z-index: 10;
+    background-color: black;
+    color: white;
+    border: 0;
+    padding: 5px 15px;
+    border-radius: 5px;
+  }
+}
