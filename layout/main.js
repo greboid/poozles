@@ -33,6 +33,9 @@ const handleGuessResponse = (response) => {
   input.elements.guess.value = ''
   if (response.result === 'correct') {
     addToList(guesses, '[✅] ' + response.guess)
+    if (response.replacement) {
+      document.getElementById('puzzle').innerHTML = response.replacement
+    }
   } else if (response.result === 'incorrect') {
     addToList(guesses, '[❌] ' + response.guess)
   } else if (response.result === 'unlock') {

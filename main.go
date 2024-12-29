@@ -56,7 +56,9 @@ func main() {
 			Level: slog.LevelInfo,
 		})))
 	}
+
 	foundPuzzles := getPuzzles()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /main.css", serveFile("layout/main.css"))
 	mux.HandleFunc("GET /main.js", serveFile("layout/main.js"))
@@ -67,6 +69,7 @@ func main() {
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	mux.HandleFunc("POST /guess", handleGuess(foundPuzzles))
 	mux.HandleFunc("POST /hint", handleHint(foundPuzzles))
+
 	var handler http.Handler
 	if *debug {
 		handler = NotFoundHandler(DisableCaching(mux))
@@ -244,9 +247,10 @@ func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 		Guess  string `json:"guess"`
 	}
 	type GuessResponse struct {
-		Guess  string      `json:"guess"`
-		Result GuessResult `json:"result"`
-		Unlock string      `json:"unlock,omitempty"`
+		Guess       string      `json:"guess"`
+		Result      GuessResult `json:"result"`
+		Unlock      string      `json:"unlock,omitempty"`
+		Replacement string      `json:"replacement,omitempty"`
 	}
 
 	return func(writer http.ResponseWriter, request *http.Request) {
@@ -281,7 +285,12 @@ func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 		normalisedGuess := normaliseAnswer(guess.Guess)
 		meta := foundPuzzles.Puzzles[index].Metadata
 		if slices.Contains(meta.Answers, normalisedGuess) {
-			_ = json.NewEncoder(writer).Encode(GuessResponse{Guess: guess.Guess, Result: guessCorrect})
+			guessResponse := GuessResponse{Guess: guess.Guess, Result: guessCorrect}
+			successBytes, err := os.ReadFile("puzzles/" + guess.Puzzle + "/success.html")
+			if err == nil {
+				guessResponse.Replacement = string(successBytes)
+			}
+			_ = json.NewEncoder(writer).Encode(guessResponse)
 			slog.Debug("Correct guess", "puzzleID", guess.Puzzle, "guess", guess.Guess, "normlisedGuess", normalisedGuess)
 			return
 		}
@@ -374,7 +383,7 @@ func getPuzzle(path string) *Puzzle {
 		os.Exit(4)
 	}
 	for _, e := range entries {
-		if !e.IsDir() && e.Name() != "index.html" {
+		if !e.IsDir() && e.Name() != "index.html" && e.Name() != "success.html" {
 			files = append(files, e.Name())
 		}
 	}
