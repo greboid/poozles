@@ -21,25 +21,6 @@ import (
 	"time"
 )
 
-type Puzzles struct {
-	Index   string
-	Puzzles []Puzzle
-	DB      dbInterface
-}
-type Puzzle struct {
-	ID       string
-	Metadata Puzzlemeta
-	Content  string
-	Files    []string
-}
-
-type Puzzlemeta struct {
-	Title   string              `yaml:"title"`
-	Answers []string            `yaml:"answers"`
-	Hints   []string            `yaml:"hints"`
-	Unlocks map[string][]string `yaml:"unlocks"`
-}
-
 var (
 	port  = flag.Int("port", 8080, "web server listen port")
 	debug = flag.Bool("debug", true, "Enable debugging and disable caching")
@@ -58,16 +39,6 @@ func main() {
 		})))
 	}
 	foundPuzzles := getPuzzles()
-	db, err := configureDatabase()
-	if err != nil {
-		slog.Error("Unable to configure database", "error", err)
-		os.Exit(2)
-	}
-	defer func() {
-		err = db.close()
-		slog.Error("Error closing database", "error", err)
-	}()
-	foundPuzzles.DB = db
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /main.css", serveFile("layout/main.css"))
@@ -107,21 +78,13 @@ func main() {
 	shutdownCtx, shutdownRelease := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownRelease()
 
-	if err = server.Shutdown(shutdownCtx); err != nil {
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		slog.Error("Failed to shut down HTTP server", "error", err)
 		os.Exit(2)
 	}
 }
 
-func handleHint(foundPuzzles *Puzzles) func(http.ResponseWriter, *http.Request) {
-	type HintRequest struct {
-		Puzzle        string `json:"puzzle"`
-		HintRequested int    `json:"hintRequested"`
-	}
-	type HintResponse struct {
-		HintRequested int    `json:"hintRequested"`
-		Hint          string `json:"hint"`
-	}
+func handleHint(foundPuzzles *Poozles) func(http.ResponseWriter, *http.Request) {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		hintRequest := HintRequest{}
 		bodyBytes, err := io.ReadAll(request.Body)
@@ -152,11 +115,11 @@ func handleHint(foundPuzzles *Puzzles) func(http.ResponseWriter, *http.Request) 
 			return
 		}
 		hint := hints[hintRequest.HintRequested]
-		responseData, err := json.Marshal(HintResponse{
+		hintResponse := &HintResponse{
 			HintRequested: hintRequest.HintRequested,
 			Hint:          hint,
-		})
-		go foundPuzzles.DB.addHint(hintRequest.Puzzle, hintRequest.HintRequested)
+		}
+		responseData, err := json.Marshal(hintResponse)
 		_, err = writer.Write(responseData)
 		if err != nil {
 			slog.Error("Error writing response to client", "error", err.Error())
@@ -176,7 +139,7 @@ func addTrailingSlash(writer http.ResponseWriter, request *http.Request) {
 	http.Redirect(writer, request, request.URL.String()+"/", http.StatusTemporaryRedirect)
 }
 
-func servePuzzleFile(foundPuzzles *Puzzles) func(http.ResponseWriter, *http.Request) {
+func servePuzzleFile(foundPuzzles *Poozles) func(http.ResponseWriter, *http.Request) {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		puzzleID := request.PathValue("id")
 		index := slices.IndexFunc(foundPuzzles.Puzzles, func(puzz Puzzle) bool {
@@ -223,13 +186,13 @@ func renderTemplate(templateName string, data interface{}, writer http.ResponseW
 	}
 }
 
-func serveIndex(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request *http.Request) {
+func serveIndex(foundPuzzles *Poozles) func(writer http.ResponseWriter, request *http.Request) {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		renderTemplate("layout/index.html", foundPuzzles.Index, writer)
 	}
 }
 
-func servePuzzle(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request *http.Request) {
+func servePuzzle(foundPuzzles *Poozles) func(writer http.ResponseWriter, request *http.Request) {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		puzzleID := request.PathValue("id")
 		index := slices.IndexFunc(foundPuzzles.Puzzles, func(puzz Puzzle) bool {
@@ -252,18 +215,7 @@ const (
 	guessUnlock    GuessResult = "unlock"
 )
 
-func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request *http.Request) {
-	type Guess struct {
-		Puzzle string `json:"puzzle"`
-		Guess  string `json:"guess"`
-	}
-	type GuessResponse struct {
-		Guess       string      `json:"guess"`
-		Result      GuessResult `json:"result"`
-		Unlock      string      `json:"unlock,omitempty"`
-		Replacement string      `json:"replacement,omitempty"`
-	}
-
+func handleGuess(foundPuzzles *Poozles) func(writer http.ResponseWriter, request *http.Request) {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		guess := Guess{}
 		bodyBytes, err := io.ReadAll(request.Body)
@@ -296,35 +248,34 @@ func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 		normalisedGuess := normaliseAnswer(guess.Guess)
 		meta := foundPuzzles.Puzzles[index].Metadata
 		if slices.Contains(meta.Answers, normalisedGuess) {
-			guessResponse := GuessResponse{Guess: guess.Guess, Result: guessCorrect}
+			guessResponse := &GuessResponse{Puzzle: foundPuzzles.Puzzles[index].ID, Guess: guess.Guess, Result: guessCorrect}
 			successBytes, err := os.ReadFile("puzzles/" + guess.Puzzle + "/success.html")
 			if err == nil {
 				guessResponse.Replacement = string(successBytes)
 			}
 			_ = json.NewEncoder(writer).Encode(guessResponse)
 			slog.Debug("Correct guess", "puzzleID", guess.Puzzle, "guess", guess.Guess, "normlisedGuess", normalisedGuess)
-			go foundPuzzles.DB.addGuess(guess.Puzzle, guess.Guess, guessCorrect)
 			return
 		}
 		for unlock := range meta.Unlocks {
 			if slices.Contains(meta.Unlocks[unlock], normalisedGuess) {
-				_ = json.NewEncoder(writer).Encode(GuessResponse{Guess: guess.Guess, Result: guessUnlock, Unlock: unlock})
+				guessResponse := &GuessResponse{Puzzle: foundPuzzles.Puzzles[index].ID, Guess: guess.Guess, Result: guessUnlock, Unlock: unlock}
+				_ = json.NewEncoder(writer).Encode(guessResponse)
 				slog.Debug("Unlock guess", "puzzleID", guess.Puzzle, "guess", guess.Guess, "normlisedGuess", normalisedGuess)
-				go foundPuzzles.DB.addGuess(guess.Puzzle, guess.Guess, guessUnlock)
 				return
 			}
 		}
-		_ = json.NewEncoder(writer).Encode(GuessResponse{Guess: guess.Guess, Result: guessIncorrect})
+		guessResponse := &GuessResponse{Puzzle: foundPuzzles.Puzzles[index].ID, Guess: guess.Guess, Result: guessIncorrect}
+		_ = json.NewEncoder(writer).Encode(guessResponse)
 		slog.Debug("Incorrect guess", "puzzleID", guess.Puzzle, "guess", guess.Guess, "normlisedGuess", normalisedGuess)
-		go foundPuzzles.DB.addGuess(guess.Puzzle, guess.Guess, guessIncorrect)
 	}
 }
 
-func getPuzzles() *Puzzles {
-	var foundPuzzles = &Puzzles{}
+func getPuzzles() *Poozles {
+	var foundPuzzles = &Poozles{}
 	entries, err := os.ReadDir("./puzzles")
 	if errors.Is(err, os.ErrNotExist) {
-		slog.Error("Puzzles folder must exist", "error", err)
+		slog.Error("Poozles folder must exist", "error", err)
 		os.Exit(3)
 	}
 	if err != nil {
@@ -333,7 +284,7 @@ func getPuzzles() *Puzzles {
 	}
 	indexBytes, err := os.ReadFile("./puzzles/index.html")
 	if errors.Is(err, os.ErrNotExist) {
-		slog.Error("Puzzles folder needs to contain index.html", "error", err)
+		slog.Error("Poozles folder needs to contain index.html", "error", err)
 		os.Exit(3)
 	}
 	if err != nil {
@@ -389,7 +340,7 @@ func getPuzzle(path string) *Puzzle {
 	var files []string
 	entries, err := os.ReadDir("./puzzles/" + path)
 	if errors.Is(err, os.ErrNotExist) {
-		slog.Error("Puzzles folder must exist", "error", err)
+		slog.Error("Poozles folder must exist", "error", err)
 		os.Exit(4)
 	}
 	if err != nil {
