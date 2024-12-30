@@ -24,6 +24,7 @@ import (
 type Puzzles struct {
 	Index   string
 	Puzzles []Puzzle
+	DB      dbInterface
 }
 type Puzzle struct {
 	ID       string
@@ -56,8 +57,17 @@ func main() {
 			Level: slog.LevelInfo,
 		})))
 	}
-
 	foundPuzzles := getPuzzles()
+	db, err := configureDatabase()
+	if err != nil {
+		slog.Error("Unable to configure database", "error", err)
+		os.Exit(2)
+	}
+	defer func() {
+		err = db.close()
+		slog.Error("Error closing database", "error", err)
+	}()
+	foundPuzzles.DB = db
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /main.css", serveFile("layout/main.css"))
@@ -97,7 +107,7 @@ func main() {
 	shutdownCtx, shutdownRelease := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownRelease()
 
-	if err := server.Shutdown(shutdownCtx); err != nil {
+	if err = server.Shutdown(shutdownCtx); err != nil {
 		slog.Error("Failed to shut down HTTP server", "error", err)
 		os.Exit(2)
 	}
@@ -146,6 +156,7 @@ func handleHint(foundPuzzles *Puzzles) func(http.ResponseWriter, *http.Request) 
 			HintRequested: hintRequest.HintRequested,
 			Hint:          hint,
 		})
+		go foundPuzzles.DB.addHint(hintRequest.Puzzle, hintRequest.HintRequested)
 		_, err = writer.Write(responseData)
 		if err != nil {
 			slog.Error("Error writing response to client", "error", err.Error())
@@ -292,17 +303,20 @@ func handleGuess(foundPuzzles *Puzzles) func(writer http.ResponseWriter, request
 			}
 			_ = json.NewEncoder(writer).Encode(guessResponse)
 			slog.Debug("Correct guess", "puzzleID", guess.Puzzle, "guess", guess.Guess, "normlisedGuess", normalisedGuess)
+			go foundPuzzles.DB.addGuess(guess.Puzzle, guess.Guess, guessCorrect)
 			return
 		}
 		for unlock := range meta.Unlocks {
 			if slices.Contains(meta.Unlocks[unlock], normalisedGuess) {
 				_ = json.NewEncoder(writer).Encode(GuessResponse{Guess: guess.Guess, Result: guessUnlock, Unlock: unlock})
 				slog.Debug("Unlock guess", "puzzleID", guess.Puzzle, "guess", guess.Guess, "normlisedGuess", normalisedGuess)
+				go foundPuzzles.DB.addGuess(guess.Puzzle, guess.Guess, guessUnlock)
 				return
 			}
 		}
 		_ = json.NewEncoder(writer).Encode(GuessResponse{Guess: guess.Guess, Result: guessIncorrect})
 		slog.Debug("Incorrect guess", "puzzleID", guess.Puzzle, "guess", guess.Guess, "normlisedGuess", normalisedGuess)
+		go foundPuzzles.DB.addGuess(guess.Puzzle, guess.Guess, guessIncorrect)
 	}
 }
 

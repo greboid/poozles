@@ -1,4 +1,4 @@
-WIP
+# Setup
 
  - Create a puzzles directory
  - Create a puzzles/index.html file which contains the body of the index page
@@ -14,6 +14,12 @@ hints: ["it's not a real word"]
 unlocks: {"you missed a letter!": ["melism", "elisma"]}
 -->
 ```
-After this include the html content of the puzzle, linking to any of the files in the folder
+After this include the html content of the puzzle, linking to any of the files in the folder.
 
-A guess box is added automatically and guesses submitted are handled and display the result with alert()
+If a success.html file is present in the puzzle folder this will replace the puzzle on a correct guess.
+
+# Configuration
+
+ - `PORT` - Web server port
+ - `DEBUG` - Run in debug mode
+ - `DB_TYPE` - Specifies what kind of database to use, currently supports noop
