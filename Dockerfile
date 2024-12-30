@@ -4,7 +4,8 @@ COPY . .
 
 RUN set -eux; \
     CGO_ENABLED=0 go build -a -ldflags '-extldflags "-static"' -trimpath -ldflags=-buildid= -o main .; \
-    go run github.com/google/go-licenses@latest save ./... --save_path=/notices;
+    # modernc.org/mathutil is 3 clause BSD licensed - https://gitlab.com/cznic/mathutil/-/blob/master/LICENSE
+    go run github.com/google/go-licenses@latest save ./... --save_path=/notices --ignore modernc.org/mathutil;
 
 FROM ghcr.io/greboid/dockerbase/nonroot:1.20241216.0
 COPY --from=build /go/src/app/main /poozles
