@@ -7,7 +7,7 @@ RUN set -eux; \
     # modernc.org/mathutil is 3 clause BSD licensed - https://gitlab.com/cznic/mathutil/-/blob/master/LICENSE
     go run github.com/google/go-licenses@latest save ./... --save_path=/notices --ignore modernc.org/mathutil;
 
-FROM ghcr.io/greboid/dockerbase/nonroot:1.20250214.0
+FROM ghcr.io/greboid/dockerbase/nonroot:1.20250326.0
 COPY --from=build /go/src/app/main /poozles
 COPY --from=build /notices /notices
 ENTRYPOINT ["/poozles"]
