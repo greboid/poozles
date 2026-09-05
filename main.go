@@ -7,7 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/csmith/envflag"
+	"github.com/csmith/envflag/v2"
 	"gopkg.in/yaml.v3"
 	"io"
 	"log/slog"
