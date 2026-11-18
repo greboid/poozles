@@ -7,7 +7,7 @@ RUN set -eux; \
     mkdir /notices; \
     go run github.com/Songmu/gocredits/cmd/gocredits@v1.1.0 . > /notices/CREDITS;
 
-FROM ghcr.io/greboid/dockerbase/nonroot:1.20261022.0
+FROM ghcr.io/greboid/dockerbase/nonroot:1.20261105.0
 COPY --from=build /go/src/app/main /poozles
 COPY --from=build /notices /notices
 ENTRYPOINT ["/poozles"]
